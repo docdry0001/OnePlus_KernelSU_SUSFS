@@ -1,5 +1,5 @@
 {
-  "model": "OP11",
+  "model": "OP11R",
   "soc": "waipio",
   "branch": "oneplus/sm8475",
   "boot_partition_size": "201326592",
