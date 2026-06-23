@@ -1,0 +1,395 @@
+name: Setup Build Environment
+
+permissions:
+  contents: write
+  actions: write
+
+inputs:
+  op_config_json:
+    description: 'JSON string containing full device config'
+    required: true
+    type: string
+  manifest:
+    required: true
+    type: string
+    default: OOS15
+  use_custom_repo_parser:
+    description: 'Do you want to use custom repo parser?'
+    required: true
+    type: string
+    default: 'false'
+  clang_version:
+    required: false
+    type: string
+    default: ""
+  common_branch_or_commit:
+    required: false
+    type: string
+    default: ""
+  msm_branch_or_commit:
+    required: false
+    type: string
+    default: ""
+  vendor_branch_or_commit:
+    required: false
+    type: string
+    default: ""
+  optimize_level:
+    required: false
+    type: string
+    default: O2  # Choices: O2 or O3
+
+runs:
+  using: composite
+  steps:
+    - name: Aggressive cleanup
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Cleanup space"
+
+        (docker system prune -af && docker builder prune -af || true) &
+
+        DIRS=(
+          /usr/share/dotnet
+          /usr/share/swift
+          /usr/local/.ghcup
+          /usr/local/julia*
+          /usr/local/lib/android
+          /usr/local/share/chromium
+          /opt/microsoft
+          /opt/google
+          /opt/az
+          /usr/local/share/powershell
+          /opt/hostedtoolcache
+        )
+
+        printf "%s\0" "${DIRS[@]}" | xargs -0 -P 4 -n 1 sudo rm -rf
+
+        wait
+        df -h
+        echo "::endgroup::"
+
+    - name: Install Minimal Dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Install deps"
+        sudo apt-get -o Acquire::Retries=3 update -qq
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          git curl ca-certificates build-essential clang lld flex bison \
+          libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+          libxml2-utils rsync unzip dwarves file python3
+        sudo apt-get clean
+        echo "::endgroup::"
+
+    - name: Install ccache with ECS by cctv18
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Install ccache with ECS"
+        wget -q https://github.com/nullptr-t-oss/kernel_patches/raw/refs/heads/main/bin/ccache-x86-64 -O ccache
+        sudo cp -f ./ccache /usr/bin/ccache
+        sudo chmod +x /usr/bin/ccache
+        rm -f ./ccache
+
+        echo "[DEBUG] Ccache version : $(ccache --version)"
+        echo "::endgroup::"
+
+    - name: Setup SWAP
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 16
+
+    - name: Parse op_config_json
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo '${{ inputs.op_config_json }}' > /tmp/config.json
+        jq -r 'to_entries[] | "\(.key | ascii_upcase)=\(.value)"' /tmp/config.json >> "$GITHUB_ENV"
+        echo "Parsed config:"
+        jq '.' /tmp/config.json
+
+    - name: Set Manifest
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "MANIFEST=$MANIFEST_${{ inputs.manifest }}" >> "$GITHUB_ENV"
+        echo "MANIFEST_NAME=${{ inputs.manifest }}" >> "$GITHUB_ENV"
+
+    - name: Validate Inputs
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Validate inputs"
+        model="$MODEL"
+        soc="$SOC"
+        branch="$BRANCH"
+        manifest="$MANIFEST"
+        optimize='${{ inputs.optimize_level }}'
+
+        # Non-empty checks
+        [[ -n "$model" ]] || { echo "Input 'model' cannot be empty"; exit 1; }
+        [[ -n "$soc" ]] || { echo "Input 'soc' cannot be empty"; exit 1; }
+        [[ -n "$branch" ]] || { echo "Input 'branch' cannot be empty"; exit 1; }
+        [[ -n "$manifest" ]] || { echo "Input 'manifest' cannot be empty"; exit 1; }
+
+        # Basic format checks
+        # soc: allow letters, digits, underscores, dashes (e.g., sm8650)
+        if ! [[ "$soc" =~ ^[A-Za-z0-9_-]+$ ]]; then
+          echo "Input 'soc' contains invalid characters. Allowed: letters, digits, underscore, dash"; exit 1
+        fi
+        # branch: allow common ref patterns; spaces not allowed
+        if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+          echo "Input 'branch' contains invalid characters. Allowed: letters, digits, ., _, -, /"; exit 1
+        fi
+        # manifest: either HTTPS URL ending with .xml, or a filename ending with .xml (no spaces)
+        if [[ "$manifest" == http*://* ]]; then
+          if ! [[ "$manifest" =~ ^https:// ]]; then
+            echo "Manifest URL must be HTTPS"; exit 1
+          fi
+          if ! [[ "$manifest" =~ \.xml($|\?) ]]; then
+            echo "Manifest URL should point to an XML file (.xml)"; exit 1
+          fi
+        else
+          if ! [[ "$manifest" =~ \.xml$ ]]; then
+            echo "Manifest filename must end with .xml"; exit 1
+          fi
+          if [[ "$manifest" =~ [[:space:]] ]]; then
+            echo "Manifest filename cannot contain spaces"; exit 1
+          fi
+        fi
+        # Optimize level validation
+        case "$optimize" in
+          O2|O3) ;;
+          *) echo "optimize_level must be O2 or O3; got '$optimize'"; exit 1 ;;
+        esac
+        echo "Input validation OK."
+        echo "::endgroup::"
+
+    - name: Setup Base Environment
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Derive a unique build directory name
+        set -euo pipefail
+        # Derive a unique build directory name
+        CONFIG="$GITHUB_WORKSPACE/$MODEL"
+        ARTIFACTS_DIR="$CONFIG/artifacts"
+        ARTIFACTS_DIR_DEBUG="$CONFIG/debug/artifacts"
+        KERNEL_PLATFORM="$CONFIG/kernel_platform"
+        COMMON="$KERNEL_PLATFORM/common"
+
+        if [[ "$BUILD_TYPE" == "Mixed Build" || "$BUILD_TYPE" == "Modules Only" ]]; then
+          MSM="$KERNEL_PLATFORM/msm-kernel"
+        else
+          MSM="$COMMON"
+        fi
+
+        KBUILD_MIXED_TREE_DIR="$CONFIG/mixed_tree"
+        WILD_KERNEL_PATCHES="$GITHUB_WORKSPACE/kernel_patches"
+        KERNEL_PATCHES="$GITHUB_WORKSPACE/my_patches"
+
+        echo "Creating folder for configuration: $CONFIG"
+        mkdir -p "$CONFIG"
+
+        mkdir -p "$ARTIFACTS_DIR"
+        mkdir -p "$ARTIFACTS_DIR_DEBUG"
+        mkdir -p "$KBUILD_MIXED_TREE_DIR"
+
+        echo "CONFIG=$CONFIG" >> "$GITHUB_ENV"
+        echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> "$GITHUB_ENV"
+        echo "ARTIFACTS_DIR_DEBUG=$ARTIFACTS_DIR_DEBUG" >> "$GITHUB_ENV"
+        echo "KERNEL_PLATFORM=$KERNEL_PLATFORM" >> "$GITHUB_ENV"
+        echo "COMMON=$COMMON" >> "$GITHUB_ENV"
+        echo "MSM=$MSM" >> "$GITHUB_ENV"
+        echo "KBUILD_MIXED_TREE_DIR=$KBUILD_MIXED_TREE_DIR" >> "$GITHUB_ENV"
+        echo "WILD_KERNEL_PATCHES=$WILD_KERNEL_PATCHES" >> "$GITHUB_ENV"
+        echo "KERNEL_PATCHES=$KERNEL_PATCHES" >> "$GITHUB_ENV"
+
+        # Install repo tool if missing
+        REPO="/usr/local/bin/repo"
+        if [ ! -x "$REPO" ]; then
+          curl -s https://storage.googleapis.com/git-repo-downloads/repo -o "$REPO"
+          chmod +x "$REPO"
+        fi
+        echo "REPO=$REPO" >> "$GITHUB_ENV"
+
+    - name: Format Manifest URL
+      if: ${{ inputs.use_custom_repo_parser == 'true' }}
+      shell: bash
+      run: |
+        if [[ "$MANIFEST" =~ ^https?:// ]]; then
+            # It is already a full URL, pass it through
+            echo "MANIFEST=$MANIFEST" >> $GITHUB_ENV
+        else
+            # Convert it to the raw GitHub URL coz my composite action supports only URLs
+            RAW_URL="https://raw.githubusercontent.com/OnePlusOSS/kernel_manifest/${BRANCH}/${MANIFEST}"
+            echo "MANIFEST=${RAW_URL}" >> $GITHUB_ENV
+        fi
+
+    - name: Prepare string to checkout custom branch or revision on custom manifest parser
+      if: ${{ inputs.use_custom_repo_parser == 'true' }}
+      shell: bash
+      run: |
+        OVERRIDES=""
+        cd "$CONFIG"
+
+        if [[ -n "${{ inputs.common_branch_or_commit }}" ]]; then
+          # Calculate the relative path from CONFIG to COMMON
+          # coz we'll use this path to find the required project to be modified in manifest
+          REL_COMMON=$(realpath --relative-to="$CONFIG" "$COMMON")
+          echo "[DEBUG] Calculated relative path: $REL_COMMON"
+
+          OVERRIDES="${REL_COMMON}=${{ inputs.common_branch_or_commit }}"
+        fi
+
+        if [[ -n "${{ inputs.msm_branch_or_commit }}" ]]; then
+          # Calculate the relative path from CONFIG to MSM
+          # coz we'll use this path to find the required project to be modified in manifest
+          REL_MSM=$(realpath --relative-to="$CONFIG" "$MSM")
+          OVERRIDES="$OVERRIDES,${REL_MSM}=${{ inputs.msm_branch_or_commit }}"
+          echo "[DEBUG] Calculated relative path: $REL_MSM"
+        fi
+
+        if [[ -n "${{ inputs.vendor_branch_or_commit }}" ]]; then
+          OVERRIDES="$OVERRIDES,./=${{ inputs.vendor_branch_or_commit }}"
+        fi
+
+        echo "Final override string: ${OVERRIDES#,}"
+        echo "PROJECT_OVERRIDE=${OVERRIDES#,}" >> "$GITHUB_ENV"
+
+    - name: Download source via custom manifest parser
+      if: ${{ inputs.use_custom_repo_parser == 'true' }}
+      uses: nullptr-t-oss/turbo-repo-sync@main
+      with:
+        manifest_path: ${{ env.MANIFEST }}
+        workspace_dir: ${{ env.CONFIG }}
+        project_overrides: ${{ env.PROJECT_OVERRIDE }}
+
+    - name: Optimize Global Git for Repo Tool
+      if: ${{ inputs.use_custom_repo_parser == 'false' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        git config --global feature.manyFiles true
+        git config --global pack.sparse true
+        git config --global core.compression 0
+        git config --global http.postBuffer 524288000
+        git config --global core.fsmonitor false
+        git config --global index.threads $(nproc)
+
+    - name: Initialize and Sync Kernel Source
+      if: ${{ inputs.use_custom_repo_parser == 'false' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "$CONFIG"
+        echo "Initializing and syncing kernel source..."
+        if [[ "$MANIFEST" == https://* ]]; then
+          mkdir -p .repo/manifests
+          curl -s --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=stable --depth=1 --no-clone-bundle --no-tags
+        else
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=stable --depth=1 --no-clone-bundle --no-tags
+        fi
+        "$REPO" --version
+        success=false
+        for i in 1 2 3; do
+          if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch \
+             -j"$(nproc --all)" --fail-fast; then
+            success=true
+            break
+          fi
+          echo "repo sync attempt $i failed; retrying..."
+          sleep 30
+        done
+        $success || { echo "repo sync failed after 3 attempts"; exit 1; }
+
+    - name: Checkout custom branch or commit hash for sources
+      if: ${{ inputs.use_custom_repo_parser == 'false' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        cd "$COMMON"
+        if [[ -z "${{ inputs.common_branch_or_commit }}" ]]; then
+          echo "Custom branch or commit not specified, proceeding on current HEAD of common kernel "
+          echo "Current HEAD for COMMON kernel repo is at:"
+          git show HEAD --no-patch
+        else
+          git fetch --all --depth=1
+          git checkout "${{ inputs.common_branch_or_commit }}"
+          echo "Current HEAD for COMMON kernel repo is at:"
+          git show HEAD --no-patch
+        fi
+
+        cd "$CONFIG"
+
+        if [[ -z "${{ inputs.vendor_branch_or_commit }}" ]]; then
+          echo "Custom branch or commit not specified, proceeding on current HEAD of vendor modules and device tree branch"
+          echo "Current HEAD for vendor modules repo is at:"
+          git show HEAD --no-patch
+        else
+          git fetch --all --depth=1
+          git checkout "${{ inputs.vendor_branch_or_commit }}"
+          echo "Current HEAD for vendor modules repo is at:"
+          git show HEAD --no-patch
+        fi
+        
+        cd "$MSM"
+        if [[ -z "${{ inputs.msm_branch_or_commit }}" ]]; then
+          echo "Custom branch or commit not specified, proceeding on current HEAD of msm kernel"
+          echo "Current HEAD for MSM kernel repo is at:"
+          git show HEAD --no-patch
+        else
+          git fetch --all --depth=1
+          git checkout "${{ inputs.msm_branch_or_commit }}"
+          echo "Current HEAD for MSM kernel repo is at:"
+          git show HEAD --no-patch
+        fi
+
+    - name: Setup clang type
+      if: ${{ inputs.clang_version != 'default' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "CLANG=${{ inputs.clang_version }}" >> "$GITHUB_ENV"
+
+
+    - name: Download Clang (toolchain for build)
+      uses: nullptr-t-oss/kernel_toolchains/clang_setup@main
+      if: env.CLANG != 'manifest'
+      with:
+        clang-version: '${{ env.CLANG }}'
+        install-dir: '${{ env.KERNEL_PLATFORM }}/prebuilts/clang/host/linux-x86'
+
+    - name: Detect Clang (toolchain for build)
+      if:  env.CLANG == 'manifest'
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Detecting Clang..."
+        CLANG_FOUND=false
+        for base in "$KERNEL_PLATFORM/prebuilts" "$KERNEL_PLATFORM/prebuilts-master"; do
+          [ -d "$base/clang/host/linux-x86" ] || continue
+
+          latest=$(ls -d "$base"/clang/host/linux-x86/clang-r*/ 2>/dev/null | sort -V | tail -n1 || true)
+          if [ -n "$latest" ] && [ -x "$latest/bin/clang" ]; then
+            CLANG_BIN="$latest/bin"
+            CLANG_FOUND=true
+          fi
+        done
+        if ! $CLANG_FOUND && command -v clang >/dev/null 2>&1; then
+          CLANG_BIN="$(dirname "$(command -v clang)")"
+          CLANG_FOUND=true
+          echo "Using system clang."
+        fi
+        $CLANG_FOUND || { echo "No clang toolchain found"; exit 1; }
+        echo "${CLANG_BIN}" >> "$GITHUB_PATH"
+        CLANG_VERSION="$("$CLANG_BIN/clang" --version | head -n1)"
+        echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
+        echo "[NOTICE] Using clang : $CLANG_VERSION"
+
+        echo "Clang detected ✅"
+        echo "::endgroup::"
