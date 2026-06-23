@@ -1563,7 +1563,7 @@ runs:
       run: |
         set -euo pipefail
         echo "::group::Applying Nethunter configs..."
-        cd "$COMMON"
+        cd "$COMMON_KERNEL_FOLDER"
 
         # Bluetooth configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
