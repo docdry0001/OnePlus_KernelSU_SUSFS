@@ -1,4 +1,4 @@
-name: Kernel and Kernel Modules
+name: Build and Release OnePlus EmberHeart Kernel and Kernel Modules
 
 permissions:
   contents: write
@@ -117,9 +117,9 @@ on:
         required: true
         type: choice
         options:
-          - OP11R
+          - OP11
           - OP11_LOS
-        default: OP11R
+        default: OP11
 
 jobs:
   set-op-model:
