@@ -9,7 +9,7 @@
   "manifest_oos14": "oneplus_11r_u.xml",
   "manifest_oos15": "oneplus_11r_v.xml",
   "manifest_oos16": "oneplus_11r_b.xml",
-  "manifest_oos16_custom": "https://raw.githubusercontent.com/docdry0001/kernel_manifest/blob/oneplus/sm8475/oneplus_11r_b.xml"
+  "manifest_oos16_custom": "https://raw.githubusercontent.com/docdry0001/kernel_manifest/blob/oneplus/sm8475/oneplus_11r_u.xml"
   "kernel_version": "5.10",
   "hmbird": false
 }
