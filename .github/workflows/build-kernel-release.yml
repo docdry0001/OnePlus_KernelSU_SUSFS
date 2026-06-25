@@ -699,7 +699,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🔨 Build modules
-        id: build
+        id: build-modules
         uses: ./.github/actions/build-modules
         with:
           op_config_json: ${{ steps.prepare_config.outputs.config_json }}
