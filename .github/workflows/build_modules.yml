@@ -118,34 +118,6 @@ jobs:
           echo "$wrapped" >> "$GITHUB_OUTPUT"
           echo "MATRIX_EOF" >> "$GITHUB_OUTPUT"
 
-  build-kernel:
-    name: Build ${{ matrix.model }} EmberHeart kernel
-    needs: set-op-model
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
-      CCACHE_NOHASHDIR: "true"
-      CCACHE_HARDLINK: "true"
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.set-op-model.outputs.matrix) }}
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Build Kernel
-        uses: ./.github/kernel
-        with:
-          op_config_json: ${{ toJSON(matrix) }}
-          ksun_branch_or_hash: ${{ inputs.ksun_branch }}
-          susfs_commit_hash_or_branch: ${{ inputs.susfs_branch_or_commit }}
-          optimize_level: ${{ inputs.optimize_level }}
-          kernel_uname: ${{ inputs.kernel_uname }}
-          manifest: ${{ inputs.manifest }}
-
   build-kernel-modules:
     name: Build ${{ matrix.model }} Kernel Modules
     needs: set-op-model
@@ -173,7 +145,6 @@ jobs:
 
   trigger-release:
     needs:
-      - build-kernel
       - build-kernel-modules
    
       
