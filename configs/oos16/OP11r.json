@@ -1,5 +1,5 @@
 {
-  "model": "OP11r-5.10.236",
+  "model": "OP11r",
   "soc": "waipio",
   "branch": "wild/sm8475",
   "manifest": "oneplus_11r_w.xml",
