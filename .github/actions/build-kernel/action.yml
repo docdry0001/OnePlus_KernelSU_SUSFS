@@ -1642,7 +1642,7 @@ runs:
         # =========================
         # USB ATTACK / GADGET (HID WEAPON)
         # =========================
-        ./scripts/config --file $CFG \
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_USB_GADGET \
           --enable CONFIG_USB_CONFIGFS \
           --enable CONFIG_USB_CONFIGFS_HID \
