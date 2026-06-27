@@ -1,8 +1,8 @@
 {
-  "model": "OP11r",
+  "model": "OP-ACE-2",
   "soc": "waipio",
   "branch": "wild/sm8475",
-  "manifest": "oneplus_11r_w.xml",
+  "manifest": "oneplus_ace2_w.xml",
   "android_version": "android12",
   "kernel_version": "5.10",
   "os_version": "OOS16",
