@@ -1639,22 +1639,6 @@ runs:
           --enable CONFIG_USB_SERIAL_FTDI_SIO \
           --enable CONFIG_USB_SERIAL_PL2303
 
-        # =========================
-        # USB ATTACK / GADGET (HID WEAPON)
-        # =========================
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_USB_GADGET \
-          --enable CONFIG_USB_CONFIGFS \
-          --enable CONFIG_USB_CONFIGFS_HID \
-          --enable CONFIG_USB_CONFIGFS_F_HID \
-          --enable CONFIG_USB_CONFIGFS_F_MASS_STORAGE \
-          --enable CONFIG_USB_CONFIGFS_F_RNDIS \
-          --enable CONFIG_USB_CONFIGFS_ECM \
-          --enable CONFIG_USB_G_ANDROID \
-          --enable CONFIG_UHID \
-          --enable CONFIG_INPUT_UINPUT
-        
-
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_MAC80211_LEDS \
