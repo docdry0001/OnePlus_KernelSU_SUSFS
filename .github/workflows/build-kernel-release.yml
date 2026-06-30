@@ -698,19 +698,6 @@ jobs:
           debug: ${{ inputs.debug }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🔨 Build modules
-        id: build-modules
-        uses: ./.github/actions/build-modules
-        with:
-          op_config_json: ${{ steps.prepare_config.outputs.config_json }}
-          ksu_type: ${{ matrix.ksu_type }}
-          ksu_branch_or_hash: ${{ matrix.ksu_resolved_hash }}
-          susfs_commit_hash_or_branch: ${{ matrix.susfs_resolved_hash }}
-          optimize_level: ${{ inputs.optimize_level }}
-          build_timestamp: ${{ inputs.build_timestamp }}
-          clean: ${{ inputs.clean_build }}
-          debug: ${{ inputs.debug }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 📊 Build statistics
         id: build-stat
