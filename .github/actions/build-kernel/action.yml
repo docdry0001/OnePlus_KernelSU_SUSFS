@@ -1611,85 +1611,66 @@ runs:
         set -euo pipefail
         echo "::group::Applying Nethunter configs..."
         cd "$COMMON_KERNEL_FOLDER"
-
-        # Bluetooth configs
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_BT_HCIBTUSB \
-          --enable CONFIG_BT_HCIBTUSB_BCM \
-          --enable CONFIG_BT_HCIBTUSB_RTL \
-          --enable CONFIG_BT_HCIVHCI \
-          --enable CONFIG_BT_HCIBCM203X \
-          --enable CONFIG_BT_HCIBPA10X \
-          --enable CONFIG_BT_HCIBFUSB
-
+        
+        cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<EOF
+        #BLUETOOTHE
+        CONFIG_BT_HCIBTUSB=y
+        CONFIG_BT_HCIBTUSB_BCM=y
+        CONFIG_BT_HCIBTUSB_RTL=y
+        CONFIG_BT_HCIVHCI=y
+        CONFIG_BT_HCIBCM203X=y
+        CONFIG_BT_HCIBPA10X=y
+        CONFIG_BT_HCIBFUSB=y
         # Airspy & HackRF
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_USB_AIRSPY \
-          --enable CONFIG_USB_HACKRF
-
+        CONFIG_USB_AIRSPY
+        CONFIG_USB_HACKRF
         # CAN
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN \
-          --enable CONFIG_CAN_DEV \
-          --enable CONFIG_CAN_CALC_BITTIMING \
-          --enable CONFIG_CAN_LEDS \
-          --enable CONFIG_CAN_VCAN \
-          --enable CONFIG_CAN_GRCAN \
-          --enable CONFIG_CAN_XILINXCAN
-
+        CONFIG_CAN=y
+        CONFIG_CAN_DEV=y
+        CONFIG_CAN_CALC_BITTIMING=y
+        CONFIG_CAN_LEDS=y
+        CONFIG_CAN_VCAN=y
+        CONFIG_CAN_GRCAN=y
+        CONFIG_CAN_XILINXCAN=y
         # Bosch C_CAN/D_CAN devices
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_C_CAN \
-          --enable CONFIG_CAN_C_CAN_PLATFORM \
-          --enable CONFIG_CAN_C_CAN_PCI
-
+        CONFIG_CAN_C_CAN=y
+        CONFIG_CAN_C_CAN_PLATFORM=y
+        CONFIG_CAN_C_CAN_PCI=y
         # Bosch CC770 and Intel AN82527 devices
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_CC770 \
-          --enable CONFIG_CAN_CC770_ISA \
-          --enable CONFIG_CAN_CC770_PLATFORM
-
+        CONFIG_CAN_CC770=y
+        CONFIG_CAN_CC770_ISA=y
+        CONFIG_CAN_CC770_PLATFORM=y
         # Bosch M_CAN devices
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_M_CAN \
-          --enable CONFIG_CAN_M_CAN_PCI \
-          --enable CONFIG_CAN_M_CAN_PLATFORM \
-          --enable CONFIG_CAN_M_CAN_TCAN4X5X
-
+        CONFIG_CAN_M_CAN=y
+        CONFIG_CAN_M_CAN_PCI=y
+        CONFIG_CAN_M_CAN_PLATFORM=y
+        CONFIG_CAN_M_CAN_TCAN4X5X=y
         # CAN SPI interfaces
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_HI311X \
-          --enable CONFIG_CAN_MCP251X
-
+        CONFIG_CAN_HI311X=y
+        CONFIG_CAN_MCP251X=y
         # CAN USB interfaces
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_8DEV_USB \
-          --enable CONFIG_CAN_EMS_USB \
-          --enable CONFIG_CAN_ESD_USB2 \
-          --enable CONFIG_CAN_GS_USB \
-          --enable CONFIG_CAN_KVASER_USB \
-          --enable CONFIG_CAN_PEAK_USB
-
+        CONFIG_CAN_8DEV_USB=y
+        CONFIG_CAN_EMS_USB=y
+        CONFIG_CAN_ESD_USB2=y
+        CONFIG_CAN_GS_USB=y
+        CONFIG_CAN_KVASER_USB=y
+        CONFIG_CAN_PEAK_USB=y
         # CAN - Networking
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_NETLINK_DIAG \
-          --enable CONFIG_VSOCKETS \
-          --enable CONFIG_NET_SCHED \
-          --enable CONFIG_NET_EMATCH_CANID
-
+        CONFIG_NETLINK_DIAG=y
+        CONFIG_VSOCKETS=y
+        CONFIG_NET_SCHED=y
+        CONFIG_NET_EMATCH_CANID=y
         # USB Serial Converter
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_USB_SERIAL \
-          --enable CONFIG_USB_SERIAL_CONSOLE \
-          --enable CONFIG_USB_SERIAL_GENERIC \
-          --enable CONFIG_USB_SERIAL_CH341 \
-          --enable CONFIG_USB_SERIAL_FTDI_SIO \
-          --enable CONFIG_USB_SERIAL_PL2303
-
+        CONFIG_USB_SERIAL=y
+        CONFIG_USB_SERIAL_CONSOLE=y
+        CONFIG_USB_SERIAL_GENERIC=y
+        CONFIG_USB_SERIAL_CH341=y
+        CONFIG_USB_SERIAL_FTDI_SIO=y
+        CONFIG_USB_SERIAL_PL2303=y
         # Other configs
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_MAC80211_LEDS \
-          --enable CONFIG_CAN_SLCAN
+        CONFIG_MAC80211_LEDS=y
+        CONFIG_CAN_SLCAN=y
+        EOF
 
 
         echo "Nethunter configs applied ✅"
