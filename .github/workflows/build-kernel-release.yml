@@ -20,6 +20,7 @@ on:
           - OOS14+15+16
           - OOS15+16
           - OOS14+15
+          - OOS16CASTOM 
           - OOS16
           - OOS15
           - OOS14
@@ -28,7 +29,7 @@ on:
           - android14-6.1
           - android13-5.15
           - android12-5.10
-        default: OOS16
+        default: OOS16CASTOM 
       ksu_options:
         description: 'Enter KernelSU build json'
         required: true
