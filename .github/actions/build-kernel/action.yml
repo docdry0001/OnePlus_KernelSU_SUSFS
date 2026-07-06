@@ -1,3 +1,4 @@
+
 name: 'Build OnePlus Kernel with KernelSU Next'
 
 inputs:
@@ -45,6 +46,11 @@ inputs:
   github_token:
     description: 'GitHub Token'
     required: true
+  artifact_url:
+    description: 'URL of a previous kernel build artifact containing its manifest (e.g., https://github.com/<owner>/<repo>/actions/runs/<run_id>/artifacts/<artifact_id>). If set, the manifest will be extracted from this artifact and used instead of the default one.'
+    required: false
+    type: string
+    default: ""
 
 outputs:
   kernel_version:
@@ -267,14 +273,6 @@ runs:
           errors+=("Input 'unicode' contains invalid characters. Allowed: 'true' or 'false'. Got: '$unicode'")
         fi
         
-        # OP_C_COMPILER currently has no checks!
-        
-        # OP_RUST_COMPILER currently has no checks!
-        
-        # OP_ZYC_COMPILER currently has no checks!
-        
-        # OP_BINDGEN currently has no checks!
-        
         if [[ -z "$ds" ]]; then
           errors+=("Input 'ds' cannot be empty")
         elif [[ "$ds" != "true" && "$ds" != "false" ]]; then
@@ -327,6 +325,58 @@ runs:
         git config --global core.fsmonitor true
         git config --global pack.sparse true
 
+    # ⬇️ Ավելացված է նոր քայլ, որը մշակում է artifact_url-ը
+    - name: 📥 Fetch manifest from artifact URL
+      id: fetch_manifest
+      shell: bash
+      if: ${{ inputs.artifact_url != '' }}
+      run: |
+        set -euo pipefail
+        echo "::group::Fetch manifest from artifact"
+        ARTIFACT_URL="${{ inputs.artifact_url }}"
+        
+        # Parse owner, repo, run_id, artifact_id from URL
+        if [[ "$ARTIFACT_URL" =~ github\.com/([^/]+)/([^/]+)/actions/runs/([0-9]+)/artifacts/([0-9]+) ]]; then
+          OWNER="${BASH_REMATCH[1]}"
+          REPO="${BASH_REMATCH[2]}"
+          RUN_ID="${BASH_REMATCH[3]}"
+          ARTIFACT_ID="${BASH_REMATCH[4]}"
+        else
+          echo "::error::Invalid artifact URL format: $ARTIFACT_URL"
+          exit 1
+        fi
+        
+        echo "Fetching artifact $ARTIFACT_ID from $OWNER/$REPO (run $RUN_ID)..."
+        
+        # Download artifact ZIP via GitHub API
+        curl -s -L -H "Authorization: Bearer ${{ inputs.github_token }}" \
+             -H "Accept: application/vnd.github+json" \
+             "https://api.github.com/repos/$OWNER/$REPO/actions/artifacts/$ARTIFACT_ID/zip" \
+             -o /tmp/artifact.zip
+        
+        if [ ! -f /tmp/artifact.zip ]; then
+          echo "::error::Failed to download artifact"
+          exit 1
+        fi
+        
+        echo "Extracting manifest from artifact..."
+        mkdir -p /tmp/artifact_contents
+        unzip -q /tmp/artifact.zip -d /tmp/artifact_contents
+        
+        # Find manifest XML (usually manifest_*.xml or default.xml)
+        MANIFEST_PATH=$(find /tmp/artifact_contents -maxdepth 2 -name "manifest*.xml" -o -name "*.xml" | head -n1)
+        if [ -z "$MANIFEST_PATH" ]; then
+          echo "::error::No manifest XML found in the artifact"
+          echo "Artifact contents:"
+          ls -la /tmp/artifact_contents
+          exit 1
+        fi
+        
+        cp "$MANIFEST_PATH" "$GITHUB_WORKSPACE/extracted_manifest.xml"
+        echo "✅ Manifest extracted to $GITHUB_WORKSPACE/extracted_manifest.xml"
+        echo "MANIFEST=$GITHUB_WORKSPACE/extracted_manifest.xml" >> "$GITHUB_ENV"
+        echo "::endgroup::"
+
     - name: Sync Kernel Source
       id: sync-kernel-source
       uses: ./action-source/.github/actions/kernel-source-sync
@@ -334,6 +384,8 @@ runs:
         source_location: ${{ env.CONFIG }}
         github_token: ${{ inputs.github_token }}
         debug: ${{ inputs.debug }}
+
+    # ⬆️ Sync-ն արդեն կտեսնի նոր MANIFEST-ը, եթե artifact-ը տրված է
 
     - name: Set Dir Paths
       shell: bash
@@ -368,6 +420,19 @@ runs:
         
         DEBUG_ZIP_NAME="debug_${OP_MODEL}_${OP_OS_VERSION}.zip"
         echo "DEBUG_ZIP_NAME=$DEBUG_ZIP_NAME" >> "$GITHUB_ENV"
+
+    # ... մնացած բոլոր քայլերը (Get Kernel Version Info, Add KernelSU, Build, և այլն) մնում են նույնը ...
+    # (Ձեր տված original action.yml-ի մնացած մասը, սկսած "Get Kernel Version Info"-ից)
+
+    - name: Parse op_config_json
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo '${{ inputs.op_config_json }}' > /tmp/config.json
+        jq -r 'to_entries[] | "OP_\(.key | ascii_upcase)=\(.value)"' /tmp/config.json >> "$GITHUB_ENV"
+        echo "Parsed config:"
+        jq '.' /tmp/config.json
+
 
     - name: Set Kernel build-tools to Path
       shell: bash
