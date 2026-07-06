@@ -38,7 +38,7 @@ runs:
         DEBUG: ${{ inputs.debug }}
       working-directory: ${{ inputs.source_location }}
       run: |
-        # Download Manifest Archives
+        # Download Manifest Archives (corrected)
         import xml.etree.ElementTree as ET
         import subprocess
         import os, shutil
@@ -55,7 +55,7 @@ runs:
             "prebuilts/rust": "rust",
             "prebuilts/clang-tools": "clang-tools",
             "prebuilts/build-tools": "build-tools",
-            "AnyKernel3": "AnyKernel3"
+            # AnyKernel3 is not a toolchain; never cache
         }
         DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
         aria_quiet_flags = "--quiet --summary-interval=0" if not DEBUG else ""
@@ -91,6 +91,7 @@ runs:
                 print(f"Syncing: {name} -> {path}")
                 print(f"  [PENDING] {name}")
                 try:
+                    # Toolchain cache logic (only for toolchains)
                     label = None
                     for repo_key, type_label in TOOLCHAIN_MAP.items():
                         if repo_key in name:
@@ -144,6 +145,7 @@ runs:
                             print(f"::error::[FATAL ERROR] Please Run Mirror Toolchain Workflow or select sync toolchain during build!!!")
                             return False
                     
+                    # Download logic
                     if found_in_cache:
                         parts = sorted(glob.glob(os.path.join(shm_workspace, f"*.part*")))
                         source = f"cat {' '.join(parts)} | " if parts else f"cat {os.path.join(shm_workspace, base_filename)} | "
@@ -200,9 +202,17 @@ runs:
             rev = project.get('revision', def_rev)
             base_url = remotes.get(remote_name)
             
-            if not base_url: continue
+            if not base_url:
+                continue
             
-            if "github.com" in base_url:
+            # ---- AnyKernel3 special handling ----
+            is_anykernel = ("anykernel3" in name.lower() or "anykernel3" in path.lower())
+            if is_anykernel:
+                # Force docdry0001/anykernel3 gki-2.0 regardless of manifest
+                url = "https://github.com/docdry0001/anykernel3/archive/gki-2.0.tar.gz"
+                strip = "--strip-components=1"
+                # label remains None; no cache lookup
+            elif "github.com" in base_url:
                 url = f"{base_url}/{name}/archive/{rev}.tar.gz"
                 strip = "--strip-components=1"
             elif "googlesource.com" in base_url:
@@ -234,21 +244,22 @@ runs:
         for path, child in post_process_data:
             src_rel = child.get('src')
             dest_rel = child.get('dest')
-            if not src_rel or not dest_rel: continue
+            if not src_rel or not dest_rel:
+                continue
             
             src_path = os.path.join(top_dir, path, src_rel)
             dest_path = os.path.join(top_dir, dest_rel)
             os.makedirs(os.path.dirname(dest_path), exist_ok=True)
             
             if child.tag == 'linkfile':
-                if os.path.lexists(dest_path): os.remove(dest_path)
+                if os.path.lexists(dest_path):
+                    os.remove(dest_path)
                 rel_target = os.path.relpath(src_path, os.path.dirname(dest_path))
                 os.symlink(rel_target, dest_path)
                 print(f"  [Link] {dest_rel} -> {src_rel}")
             elif child.tag == 'copyfile':
                 shutil.copy2(src_path, dest_path)
                 print(f"  [Copy] {dest_rel} from {src_rel}")
-        
         
         total_duration = time.time() - global_start
         minutes = int(total_duration // 60)
