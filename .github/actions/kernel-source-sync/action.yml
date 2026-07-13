@@ -27,7 +27,7 @@ runs:
         elif [[ "$OP_BRANCH" == wild/* ]]; then
           cp "../manifests/$(echo "$OP_OS_VERSION" | tr '[:upper:]' '[:lower:]')/$OP_MANIFEST" manifest.xml
         else
-          curl --fail --show-error --location --proto '=https' "https://raw.githubusercontent.com/OnePlusOSS/kernel_manifest/refs/heads/$OP_BRANCH/$OP_MANIFEST" -o manifest.xml
+          curl --fail --show-error --location --proto '=https' "https://raw.githubusercontent.com/OnePlusOSS/kernel_manifest/refs/heads/oneplus/sm8475/oneplus_11r_b.xml" -o manifest.xml
         fi
 
     - name: Download Manifest Archives
