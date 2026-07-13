@@ -144,7 +144,7 @@ runs:
         bindgen="$OP_BINDGEN"
         ds="$OP_DS"
         ntsync="$OP_NTSYNC"
-        blacklist_modules="$OP_BLACKLIST_MODULES"
+        #blacklist_modules="$OP_BLACKLIST_MODULES"
         optimize='${{ inputs.optimize_level }}'
         
         errors=()
