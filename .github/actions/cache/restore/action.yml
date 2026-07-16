@@ -38,8 +38,8 @@ runs:
         cd "$GITHUB_WORKSPACE"
         
         TAG_NAME="${{ inputs.cache_bucket }}"
-        BASE_URL="https://github.com/docdry0001/EmberHeart_OnePlus11/releases/tag/v2.2.0-r1"
-        ASSETS_URL="https://github.com/docdry0001/EmberHeart_OnePlus11/releases/expanded_assets/$TAG_NAME"
+        BASE_URL="https://github.com/wildkernels/OnePlus_KernelSU_SUSFS/releases/tag/v2.2.0-r1"
+        ASSETS_URL="https://github.com/wildkernels/OnePlus_KernelSU_SUSFS/releases/expanded_assets/$TAG_NAME"
         
         ARIA2_OPTS=(
           "-x16" "-s16" "-k1M" "-j5" "--file-allocation=none"
